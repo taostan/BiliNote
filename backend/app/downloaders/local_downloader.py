@@ -6,10 +6,15 @@ from typing import Optional
 from app.downloaders.base import Downloader
 from app.enmus.note_enums import DownloadQuality
 from app.models.audio_model import AudioDownloadResult
-import os
-import subprocess
 
 from app.utils.video_helper import save_cover_to_static
+
+# 纯音频扩展名：这类文件无需（也不能）再转 mp3，且没有视频流可抽封面/截帧
+AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".aac", ".flac", ".ogg", ".opus"}
+
+
+def is_audio_file(path: str) -> bool:
+    return os.path.splitext(path)[1].lower() in AUDIO_EXTENSIONS
 
 
 class LocalDownloader(Downloader, ABC):
@@ -89,11 +94,6 @@ class LocalDownloader(Downloader, ABC):
         """
         处理本地文件路径，返回视频文件路径
         """
-        if video_url.startswith('/uploads'):
-            project_root = os.getcwd()
-            video_url = os.path.join(project_root, video_url.lstrip('/'))
-            video_url = os.path.normpath(video_url)
-
         if not os.path.exists(video_url):
             raise FileNotFoundError()
         return video_url
@@ -107,27 +107,27 @@ class LocalDownloader(Downloader, ABC):
         """
         处理本地文件路径，返回音频元信息
         """
-        if video_url.startswith('/uploads'):
-            project_root = os.getcwd()
-            video_url = os.path.join(project_root, video_url.lstrip('/'))
-            video_url = os.path.normpath(video_url)
-
         if not os.path.exists(video_url):
             raise FileNotFoundError(f"本地文件不存在: {video_url}")
 
         file_name = os.path.basename(video_url)
         title, _ = os.path.splitext(file_name)
-        print(title, file_name,video_url)
-        file_path=self.convert_to_mp3(video_url)
-        cover_path = self.extract_cover(video_url)
-        cover_url = save_cover_to_static(cover_path)
 
-        print('file——path',file_path)
+        if is_audio_file(video_url):
+            # 纯音频文件直接使用原文件，避免 ffmpeg 输入输出同路径导致失败；
+            # 音频没有视频流，封面提取也会失败，跳过。
+            file_path = video_url
+            cover_url = None
+        else:
+            file_path = self.convert_to_mp3(video_url)
+            cover_path = self.extract_cover(video_url)
+            cover_url = save_cover_to_static(cover_path)
+
         return AudioDownloadResult(
             file_path=file_path,
             title=title,
             duration=0,  # 可选：后续加上读取时长
-            cover_url=cover_url,  # 暂无封面
+            cover_url=cover_url,
             platform="local",
             video_id=title,
             raw_info={

@@ -9,7 +9,6 @@ from app.utils.response import ResponseWrapper as R
 from app.utils.logger import get_logger
 from app.utils.path_helper import get_model_dir
 
-from app.services.cookie_manager import CookieConfigManager
 from app.services.transcriber_config_manager import TranscriberConfigManager
 from app.transcriber import model_download_state as dl_state
 from ffmpeg_helper import ensure_ffmpeg_or_raise
@@ -17,31 +16,8 @@ from ffmpeg_helper import ensure_ffmpeg_or_raise
 logger = get_logger(__name__)
 
 router = APIRouter()
-cookie_manager = CookieConfigManager()
 transcriber_config_manager = TranscriberConfigManager()
 
-
-class CookieUpdateRequest(BaseModel):
-    platform: str
-    cookie: str
-
-
-@router.get("/get_downloader_cookie/{platform}")
-def get_cookie(platform: str):
-    cookie = cookie_manager.get(platform)
-    if not cookie:
-        return R.success(msg='未找到Cookies')
-    return R.success(
-        data={"platform": platform, "cookie": cookie}
-    )
-
-
-@router.post("/update_downloader_cookie")
-def update_cookie(data: CookieUpdateRequest):
-    cookie_manager.set(data.platform, data.cookie)
-    return R.success(
-
-    )
 
 class TranscriberConfigRequest(BaseModel):
     transcriber_type: str
@@ -118,7 +94,7 @@ def update_transcriber_config(data: TranscriberConfigRequest):
     return R.success(data=config)
 
 
-# ---- 全局代理配置（作用于 LLM API + 转写 API + yt-dlp 下载）----
+# ---- 全局代理配置（作用于 LLM API + 转写 API + Whisper 模型下载）----
 
 class ProxyConfigRequest(BaseModel):
     enabled: bool

@@ -1,7 +1,6 @@
 import {
   BotMessageSquare,
   Captions,
-  HardDriveDownload,
   Info,
   Activity,
 } from 'lucide-react'
@@ -21,19 +20,6 @@ const Menu = () => {
       icon: <Captions />,
       path: '/settings/transcriber',
     },
-    {
-      id: 'download',
-      name: '下载配置',
-      icon: <HardDriveDownload />,
-      path: '/settings/download',
-    },
-    // //其他配置
-    // {
-    //   id: 'prompt',
-    //   name: '提示词设置',
-    //   icon: <SquareChevronRight />,
-    //   path: '/settings/prompt',
-    // },
     {
       id: 'monitor',
       name: '部署监控',

@@ -89,8 +89,8 @@ class TranscriberConfigManager:
             from app.routers.config import (
                 _check_whisper_model_exists,
                 _check_mlx_whisper_model_exists,
-                _downloading,
             )
+            from app.transcriber import model_download_state as dl_state
         except Exception as e:
             # 拿不到检查函数时保守放行，不要把用户卡死
             result["reason"] = f"无法检查模型状态: {e}"
@@ -98,10 +98,10 @@ class TranscriberConfigManager:
 
         if ttype == "fast-whisper":
             downloaded = _check_whisper_model_exists(size, "whisper")
-            downloading = _downloading.get(size) == "downloading"
+            downloading = dl_state.is_downloading(size)
         else:  # mlx-whisper
             downloaded = _check_mlx_whisper_model_exists(size)
-            downloading = _downloading.get(f"mlx-{size}") == "downloading"
+            downloading = dl_state.is_downloading(f"mlx-{size}")
 
         result["downloading"] = downloading
         if downloaded:

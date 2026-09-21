@@ -26,7 +26,12 @@ export default defineConfig(({ mode }) => {
   const envDir = process.env.DOCKER_BUILD ? __dirname : path.resolve(__dirname, '../')
   const env = loadEnv(mode, envDir)
 
+  // 让浏览器侧 import.meta.env.VITE_* 也从项目根的 .env 注入，
+  // 否则 dev 模式下前端读不到 VITE_API_BASE_URL，会回退到相对路径走代理。
+  // 代理 target 必须去掉尾部的 /api（VITE_API_BASE_URL 约定带 /api 前缀），
+  // 否则相对路径请求会变成 /api/api/... 导致 404。
   const apiBaseUrl = env.VITE_API_BASE_URL || 'http://127.0.0.1:8483'
+  const proxyTarget = apiBaseUrl.replace(/\/api\/?$/, '')
   const port = parseInt(env.VITE_FRONTEND_PORT || '3015', 10)
   const appVersion = env.VITE_APP_VERSION || process.env.VITE_APP_VERSION || readAppVersion()
 
@@ -58,12 +63,12 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true, // 允许任意域名访问
       proxy: {
         '/api': {
-          target: apiBaseUrl,
+          target: proxyTarget,
           changeOrigin: true,
           rewrite: path => path.replace(/^\/api/, '/api'),
         },
         '/static': {
-          target: apiBaseUrl,
+          target: proxyTarget,
           changeOrigin: true,
           rewrite: path => path.replace(/^\/static/, '/static'),
         },

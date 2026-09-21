@@ -433,8 +433,8 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
       <div className="flex h-screen w-full flex-col items-center justify-center space-y-3 text-neutral-500">
         <Idle />
         <div className="text-center">
-          <p className="text-lg font-bold">输入视频链接并点击"生成笔记"</p>
-          <p className="mt-2 text-xs text-neutral-500">支持哔哩哔哩、YouTube 、抖音等视频平台</p>
+          <p className="text-lg font-bold">选择本地视频并点击"生成笔记"</p>
+          <p className="mt-2 text-xs text-neutral-500">支持本地视频文件或包含视频的文件夹</p>
         </div>
       </div>
     )
@@ -502,7 +502,6 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
                 <div className="px-2">
                   <VideoBanner
                     audioMeta={currentTask?.audioMeta}
-                    videoUrl={currentTask?.formData?.video_url}
                   />
                 </div>
                 <div className={'markdown-body w-full px-2'}>
@@ -535,8 +534,8 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
                 <div className="bg-primary-light mb-4 flex h-16 w-16 items-center justify-center rounded-full">
                   <ArrowRight className="text-primary h-8 w-8" />
                 </div>
-                <p className="mb-2 text-neutral-600">输入视频链接并点击"生成笔记"按钮</p>
-                <p className="text-xs text-neutral-500">支持哔哩哔哩、YouTube等视频网站</p>
+                <p className="mb-2 text-neutral-600">选择本地视频并点击"生成笔记"按钮</p>
+                <p className="text-xs text-neutral-500">支持本地视频文件或包含视频的文件夹</p>
               </div>
             </div>
           )}

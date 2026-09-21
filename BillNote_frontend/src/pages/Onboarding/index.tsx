@@ -36,7 +36,7 @@ async function pingBackend(): Promise<boolean> {
 // 1. 后端连通性自检
 // 2. LLM 供应商 + 模型（最简：只引导填一个 OpenAI-兼容供应商 + 一个 model 名）
 // 3. 转写引擎选择（推荐 Groq 在线，避开本地模型下载坑）
-// 4. （可选）Cookie 同步说明（仅当用户关注 B 站等需要登录态的平台时）
+// 4. 本地视频使用说明
 
 const ONBOARD_KEY = 'bilinote-onboarded'
 
@@ -334,15 +334,13 @@ const Onboarding = () => {
 
         {step === 4 && (
           <section className="flex flex-col gap-3">
-            <h2 className="font-semibold">第 4 步 · Cookie 同步（可选）</h2>
+            <h2 className="font-semibold">第 4 步 · 本地视频</h2>
             <p className="text-sm text-gray-600">
-              想总结 <strong>B 站 / 抖音 / 快手</strong> 等需要登录态的平台时，需要把浏览器 cookie 复制到「下载配置」页。
+              BiliNote 现在只处理<strong>本地视频文件</strong>。回到首页后，点击「选择文件」或「选择文件夹」
+              挑选本地视频（支持 mp4 / mkv / mov / mp3 等），提交后自动完成音频提取、转写与笔记生成。
               <br />
-              YouTube 一般不需要 cookie。先跳过也没问题，到时再去配。
+              选择文件夹会批量处理其中的所有视频文件。
             </p>
-            <div className="rounded bg-gray-50 p-3 text-xs text-gray-600">
-              提示：插件版（<a className="text-blue-600 underline" href="https://github.com/JefferyHcool/BiliNote/tree/develop/BillNote_extension" target="_blank" rel="noreferrer">BillNote_extension</a>）支持一键 cookie 同步；桌面版需手动复制。
-            </div>
             <div className="flex gap-2 justify-between">
               <button className="text-sm text-gray-500 hover:text-gray-800" onClick={prev}>上一步</button>
               <button className="px-4 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700" onClick={finish}>

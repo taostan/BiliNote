@@ -32,13 +32,23 @@ export const generateNote = async (data: {
 
     return response
   } catch (e: any) {
-    console.error('❌ 请求出错', e)
+    console.error('请求出错', e)
 
     // 错误提示
     // toast.error('笔记生成失败，请稍后重试')
 
     throw e // 抛出错误以便调用方处理
   }
+}
+
+// 弹出后端系统文件选择对话框，返回选中的本地文件绝对路径（取消返回空字符串）
+export const pickFile = async (): Promise<{ path: string }> => {
+  return await request.post('/pick_file')
+}
+
+// 弹出后端系统文件夹选择对话框，返回选中的本地文件夹绝对路径（取消返回空字符串）
+export const pickFolder = async (): Promise<{ path: string }> => {
+  return await request.post('/pick_folder')
 }
 
 export const delete_task = async ({ video_id, platform }) => {

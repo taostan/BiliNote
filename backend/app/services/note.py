@@ -10,10 +10,7 @@ from pydantic import HttpUrl
 from dotenv import load_dotenv
 
 from app.downloaders.base import Downloader
-from app.downloaders.bilibili_downloader import BilibiliDownloader
-from app.downloaders.douyin_downloader import DouyinDownloader
-from app.downloaders.local_downloader import LocalDownloader
-from app.downloaders.youtube_downloader import YoutubeDownloader
+from app.downloaders.local_downloader import is_audio_file
 from app.db.video_task_dao import delete_task_by_video, insert_video_task
 from app.enmus.exception import NoteErrorEnum, ProviderErrorEnum
 from app.enmus.task_status_enums import TaskStatus
@@ -133,7 +130,7 @@ class NoteGenerator:
             audio_cache_file = NOTE_OUTPUT_DIR / f"{task_id}_audio.json"
             transcript_cache_file = NOTE_OUTPUT_DIR / f"{task_id}_transcript.json"
             markdown_cache_file = NOTE_OUTPUT_DIR / f"{task_id}_markdown.md"
-            # 1. 获取字幕/转写：优先缓存 → 平台字幕 → 音频转写
+            # 1. 转写：优先读缓存，没有则在后面走音频转写
             transcript = None
 
             # 尝试读取缓存
@@ -151,28 +148,7 @@ class NoteGenerator:
                 except Exception as e:
                     logger.warning(f"加载转写缓存失败: {e}")
 
-            # 缓存没有，尝试获取平台字幕
-            if transcript is None:
-                logger.info("尝试获取平台字幕（优先于音频下载）...")
-                try:
-                    transcript = downloader.download_subtitles(video_url)
-                    if transcript and transcript.segments:
-                        logger.info(f"成功获取平台字幕，共 {len(transcript.segments)} 段")
-                        transcript_cache_file.write_text(
-                            json.dumps(asdict(transcript), ensure_ascii=False, indent=2),
-                            encoding="utf-8",
-                        )
-                    else:
-                        transcript = None
-                        logger.info("平台无可用字幕，将下载音频后转写")
-                except Exception as e:
-                    logger.warning(f"获取平台字幕失败: {e}，将下载音频后转写")
-                    transcript = None
-
-            # 2. 下载音频/视频
-            # 有字幕时只提取元信息，不下载音视频文件（除非需要截图/视频理解）
-            has_transcript = transcript is not None
-            need_full_download = not has_transcript or screenshot or video_understanding
+            # 2. 提取本地音频/视频（ffmpeg 转音频、封面）
             audio_meta = self._download_media(
                 downloader=downloader,
                 video_url=video_url,
@@ -185,14 +161,11 @@ class NoteGenerator:
                 video_understanding=video_understanding,
                 video_interval=video_interval,
                 grid_size=grid_size,
-                skip_download=not need_full_download,
             )
 
-            # 3. 如果前面没拿到字幕，走转写流程
+            # 3. 如果前面没拿到缓存转写，走音频转写流程
             if transcript is None:
                 transcript = self._get_transcript(
-                    downloader=downloader,
-                    video_url=video_url,
                     audio_file=audio_meta.file_path,
                     transcript_cache_file=transcript_cache_file,
                     status_phase=TaskStatus.TRANSCRIBING,
@@ -373,20 +346,19 @@ class NoteGenerator:
         video_understanding: bool,
         video_interval: int,
         grid_size: List[int],
-        skip_download: bool = False,
     ) -> AudioDownloadResult | None:
         """
-        1. 检查音频缓存；若不存在，则根据需要下载音频或视频（若需截图/可视化）。
-        2. 如果需要视频，则先下载视频并生成缩略图集，再下载音频。
+        1. 检查音频缓存；若不存在，则从本地视频提取音频（ffmpeg 转 mp3 + 封面）。
+        2. 如果需要截图/视频理解，先记录本地视频路径并生成缩略图集。
         3. 返回 AudioDownloadResult
 
-        :param downloader: Downloader 实例
-        :param video_url: 视频/音频链接
-        :param quality: 音频下载质量
+        :param downloader: Downloader 实例（本地文件处理）
+        :param video_url: 本地视频/音频文件路径
+        :param quality: 音频质量
         :param audio_cache_file: 本地缓存 JSON 文件路径
         :param status_phase: 对应的状态枚举，如 TaskStatus.DOWNLOADING
         :param platform: 平台标识
-        :param output_path: 下载输出目录（可为 None）
+        :param output_path: 输出目录（可为 None）
         :param screenshot: 是否需要在笔记中插入截图
         :param video_understanding: 是否需要生成缩略图
         :param video_interval: 视频截帧间隔
@@ -403,40 +375,24 @@ class NoteGenerator:
                 data = json.loads(audio_cache_file.read_text(encoding="utf-8"))
                 return AudioDownloadResult(**data)
             except Exception as e:
-                logger.warning(f"读取音频缓存失败，将重新下载：{e}")
+                logger.warning(f"读取音频缓存失败，将重新提取：{e}")
 
-        # 有字幕且不需要截图/视频理解时，只提取元信息不下载文件
-        if skip_download:
-            logger.info("已有字幕，仅提取视频元信息（不下载音视频）")
-            try:
-                audio = downloader.download(
-                    video_url=video_url,
-                    quality=quality,
-                    output_dir=output_path,
-                    need_video=False,
-                    skip_download=True,
-                )
-                audio_cache_file.write_text(
-                    json.dumps(asdict(audio), ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                logger.info(f"元信息提取完成 ({audio_cache_file})")
-                return audio
-            except Exception as exc:
-                logger.warning(f"元信息提取失败，将尝试完整下载: {exc}")
-
-        # 判断是否需要下载视频
+        # 判断是否需要视频文件（截图/视频理解）
         need_video = screenshot or video_understanding
+        if need_video and is_audio_file(str(video_url)):
+            # 纯音频没有视频流，抽帧/截图必然失败，跳过而不是让整个任务报错
+            logger.info("输入为纯音频文件，跳过视频截帧与视频理解")
+            need_video = False
         if screenshot and not grid_size:
             grid_size = [2, 2]
 
         frame_interval = video_interval if video_interval and video_interval > 0 else 6
         if need_video:
             try:
-                logger.info("开始下载视频")
+                logger.info("开始定位本地视频")
                 video_path_str = downloader.download_video(video_url)
                 self.video_path = Path(video_path_str)
-                logger.info(f"视频下载完成：{self.video_path}")
+                logger.info(f"本地视频路径确认：{self.video_path}")
 
                 if grid_size:
                     self.video_img_urls = VideoReader(
@@ -450,13 +406,13 @@ class NoteGenerator:
                 else:
                     logger.info("未指定 grid_size，跳过缩略图生成")
             except Exception as exc:
-                logger.error(f"视频下载失败：{exc}")
+                logger.error(f"本地视频处理失败：{exc}")
                 self._handle_exception(task_id, exc)
                 raise
 
-        # 下载音频
+        # 提取音频
         try:
-            logger.info("开始下载音频")
+            logger.info("开始提取音频")
             audio = downloader.download(
                 video_url=video_url,
                 quality=quality,
@@ -464,29 +420,25 @@ class NoteGenerator:
                 need_video=need_video,
             )
             audio_cache_file.write_text(json.dumps(asdict(audio), ensure_ascii=False, indent=2), encoding="utf-8")
-            logger.info(f"音频下载并缓存成功 ({audio_cache_file})")
+            logger.info(f"音频提取并缓存成功 ({audio_cache_file})")
             return audio
         except Exception as exc:
-            logger.error(f"音频下载失败：{exc}")
+            logger.error(f"音频提取失败：{exc}")
             self._handle_exception(task_id, exc)
             raise
 
 
     def _get_transcript(
         self,
-        downloader: Downloader,
-        video_url: str,
         audio_file: str,
         transcript_cache_file: Path,
         status_phase: TaskStatus,
         task_id: Optional[str] = None,
     ) -> TranscriptResult | None:
         """
-        优先获取平台字幕，没有则 fallback 到音频转写
+        音频转写：优先读缓存，否则调用转写器
 
-        :param downloader: 下载器实例
-        :param video_url: 视频链接
-        :param audio_file: 音频文件路径（用于 fallback 转写）
+        :param audio_file: 音频文件路径
         :param transcript_cache_file: 缓存文件路径
         :param status_phase: 状态枚举
         :param task_id: 任务 ID
@@ -504,24 +456,6 @@ class NoteGenerator:
             except Exception as e:
                 logger.warning(f"加载转写缓存失败，将重新获取：{e}")
 
-        # 1. 先尝试获取平台字幕
-        logger.info("尝试获取平台字幕...")
-        try:
-            transcript = downloader.download_subtitles(video_url)
-            if transcript and transcript.segments:
-                logger.info(f"成功获取平台字幕，共 {len(transcript.segments)} 段")
-                # 缓存结果
-                transcript_cache_file.write_text(
-                    json.dumps(asdict(transcript), ensure_ascii=False, indent=2),
-                    encoding="utf-8"
-                )
-                return transcript
-            else:
-                logger.info("平台无可用字幕，将使用音频转写")
-        except Exception as e:
-            logger.warning(f"获取平台字幕失败: {e}，将使用音频转写")
-
-        # 2. Fallback 到音频转写
         return self._transcribe_audio(
             audio_file=audio_file,
             transcript_cache_file=transcript_cache_file,

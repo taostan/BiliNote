@@ -59,7 +59,7 @@ export interface Task {
 interface TaskStore {
   tasks: Task[]
   currentTaskId: string | null
-  addPendingTask: (taskId: string, platform: string) => void
+  addPendingTask: (taskId: string, platform: string, formData?: any, title?: string) => void
   updateTaskContent: (id: string, data: Partial<Omit<Task, 'id' | 'createdAt'>>) => void
   removeTask: (id: string) => void
   clearTasks: () => void
@@ -74,7 +74,7 @@ export const useTaskStore = create<TaskStore>()(
       tasks: [],
       currentTaskId: null,
 
-      addPendingTask: (taskId: string, platform: string, formData: any) =>
+      addPendingTask: (taskId: string, platform: string, formData: any, title?: string) =>
 
         set(state => ({
           tasks: [
@@ -97,7 +97,8 @@ export const useTaskStore = create<TaskStore>()(
                 file_path: '',
                 platform: '',
                 raw_info: null,
-                title: '',
+                // 批量模式下立即用文件名占位，失败任务也能显示正确标题
+                title: title || '',
                 video_id: '',
               },
             },
